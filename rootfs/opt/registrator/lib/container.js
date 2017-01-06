@@ -42,10 +42,24 @@ const Container = function (definition, consulAgent) {
 
         return tmp.length ? tmp : fallback;
     };
+    this.getIp = function (networkSettings){
+        if (!networkSettings.IPAddress) {
+            for (let key in networkSettings.Networks) {
+                if (networkSettings.Networks.hasOwnProperty(key)) {
+                    // return first available IP address from network settings
+                    if (networkSettings.Networks[key].hasOwnProperty("IPAddress") && networkSettings.Networks[key]["IPAddress"]) {
+                        return networkSettings.Networks[key]["IPAddress"];
+                    }
+                }
+            }
+        }
+
+        return networkSettings.IPAddress;
+    };
 
     this.definition = definition;
     this.name = this.getName(this.definition.Config.Env, "^SERVICE_NAME=.*$", this.definition.Name.substr(1).replace(/_\d+$/, '').replace(/_/g, '-'));
-    this.ip = this.definition.NetworkSettings.IPAddress;
+    this.ip = this.getIp(this.definition.NetworkSettings);
     this.ports = this.getPorts(this.definition.Config.ExposedPorts);
     this.tags = this.getTags(this.definition.Config.Env, "^SERVICE_TAGS=.*$", null);
     this.id = this.definition.Id;
