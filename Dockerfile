@@ -3,18 +3,17 @@ MAINTAINER Volker Machon <volker@machon.biz>
 
 RUN mkdir -p /opt/registrator \
       && [ $(getent group registrator) ] || addgroup -S registrator \
-      && [ $(getent group docker) ] || addgroup -S docker \
       && [ $(getent passwd registrator) ] || adduser -h /opt/registrator -S -D -G registrator registrator \
       && apk add --no-cache \
              ca-certificates \
-             nodejs
+             nodejs \
+             su-exec
 
 COPY rootfs/ /
 
-RUN chown -R registrator.registrator /opt/registrator
-
-USER registrator
 WORKDIR /opt/registrator
 RUN npm install
+RUN chown -R registrator.registrator /opt/registrator
 
-CMD ["node", "index.js", "--consul", "${CONSUL_HOST}:8500", ">", "/proc/self/fd/2"]
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["registrator"]
