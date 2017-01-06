@@ -3,6 +3,7 @@ MAINTAINER Volker Machon <volker@machon.biz>
 
 RUN mkdir -p /opt/registrator \
       && [ $(getent group registrator) ] || addgroup -S registrator \
+      && [ $(getent group docker) ] || addgroup -S docker \
       && [ $(getent passwd registrator) ] || adduser -h /opt/registrator -S -D -G registrator registrator \
       && apk add --no-cache \
              ca-certificates \
