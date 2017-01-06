@@ -1,0 +1,3 @@
+opt/registrator/node_modules
+opt/registrator/*.min.js
+opt/registrator/lib/*.min.js
