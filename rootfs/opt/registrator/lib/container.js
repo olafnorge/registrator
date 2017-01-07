@@ -114,7 +114,7 @@ Container.prototype.consulRegister = function (callback) {
                 agent.service.register(options, function (err, data, res) {
                     callback(err, data, res, options);
                 });
-            })({"name": name, "id": id, "tags": tags, "address": this.ip, "port": port, "check": checks}, this.agent);
+            })({"name": name, "id": id, "tags": tags, "address": this.ip, "port": port, "checks": checks}, this.agent);
         }
     } else {
         (function (options, agent) {
@@ -126,7 +126,7 @@ Container.prototype.consulRegister = function (callback) {
             "id": this.id + ":" + this.name,
             "tags": this.tags,
             "address": this.ip,
-            "check": this.checks
+            "checks": this.checks
         }, this.agent);
     }
 };
