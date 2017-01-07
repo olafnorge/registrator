@@ -1,4 +1,30 @@
 const Container = function (definition, consulAgent) {
+    let objectEquivality = function isEquivalent(a, b) {
+        // Create arrays of property names
+        var aProps = Object.getOwnPropertyNames(a);
+        var bProps = Object.getOwnPropertyNames(b);
+
+        // If number of properties is different,
+        // objects are not equivalent
+        if (aProps.length != bProps.length) {
+            return false;
+        }
+
+        for (var i = 0; i < aProps.length; i++) {
+            var propName = aProps[i];
+
+            // If values of same property are not equal,
+            // objects are not equivalent
+            if (a[propName] !== b[propName]) {
+                return false;
+            }
+        }
+
+        // If we made it this far, objects
+        // are considered equivalent
+        return true;
+    };
+
     this.getIsIgnored = function (env, regex) {
         let matcher = new RegExp(regex);
 
@@ -58,22 +84,28 @@ const Container = function (definition, consulAgent) {
     };
     this.getChecks = function (env, regex, fallback) {
         let tmp = fallback || [];
+        let check = {};
         let matcher = new RegExp(regex);
+        let checkExists = false;
 
         for (let index = 0; index < env.length; index++) {
             if (matcher.test(env[index])) {
-                let checks = env[index].split('=', 2)[1];
+                let key = env[index].split('=', 2)[0].split('_').pop().toLowerCase();
+                let value = env[index].split('=', 2)[1];
+                check[key] = value;
+            }
+        }
 
-                if (checks instanceof Array) {
-                    for (let i = 0; i < checks.length; i++) {
-                        if (tmp.includes(checks[i])) continue;
-                        tmp.push(checks[i]);
-                    }
-                } else if (checks instanceof Object) {
-                    if (!tmp.includes(checks)) {
-                        tmp.push(checks);
-                    }
+        if (Object.keys(check).length) {
+            for (let i = 0; i < tmp.length; i++) {
+                if (objectEquivality(tmp[i], check)) {
+                    checkExists = true;
+                    break;
                 }
+            }
+
+            if (!checkExists) {
+                tmp.push(check);
             }
         }
 
@@ -89,7 +121,7 @@ const Container = function (definition, consulAgent) {
     this.agent = consulAgent;
     this.isIgnored = this.getIsIgnored(this.definition.Config.Env, "^SERVICE_IGNORE=.*$");
     this.isRunning = this.definition.State.Status === "running";
-    this.checks = this.getChecks(this.definition.Config.Env, "^SERVICE_CHECKS=.*$", null);
+    this.checks = this.getChecks(this.definition.Config.Env, "^SERVICE_CHECK_[A-Z]+=.*$", null);
 };
 
 Container.prototype.consulRegister = function (callback) {
@@ -108,7 +140,7 @@ Container.prototype.consulRegister = function (callback) {
             let name = this.getName(this.definition.Config.Env, "^SERVICE_" + port + "_NAME=.*$", this.name);
             let id = this.id + ":" + name + ":" + port + ":" + protocol;
             let tags = this.getTags(this.definition.Config.Env, "^SERVICE_" + port + "_TAGS=.*$", this.tags);
-            let checks = this.getChecks(this.definition.Config.Env, "^SERVICE_" + port + "_CHECKS=.*$", this.checks);
+            let checks = JSON.parse(JSON.stringify(this.getChecks(this.definition.Config.Env, "^SERVICE_" + port + "_CHECK_.*=.*$", this.checks)).replace('$SERVICE_IP', this.ip).replace('$SERVICE_PORT', port));
 
             (function (options, agent) {
                 agent.service.register(options, function (err, data, res) {
@@ -126,7 +158,7 @@ Container.prototype.consulRegister = function (callback) {
             "id": this.id + ":" + this.name,
             "tags": this.tags,
             "address": this.ip,
-            "checks": this.checks
+            "checks": JSON.parse(JSON.stringify(this.checks).replace('$SERVICE_IP', this.ip))
         }, this.agent);
     }
 };
