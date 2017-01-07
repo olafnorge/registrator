@@ -1,8 +1,8 @@
 const Container = function (definition, consulAgent) {
     let objectEquivality = function isEquivalent(a, b) {
         // Create arrays of property names
-        var aProps = Object.getOwnPropertyNames(a);
-        var bProps = Object.getOwnPropertyNames(b);
+        let aProps = Object.getOwnPropertyNames(a);
+        let bProps = Object.getOwnPropertyNames(b);
 
         // If number of properties is different,
         // objects are not equivalent
@@ -10,8 +10,8 @@ const Container = function (definition, consulAgent) {
             return false;
         }
 
-        for (var i = 0; i < aProps.length; i++) {
-            var propName = aProps[i];
+        for (let i = 0; i < aProps.length; i++) {
+            let propName = aProps[i];
 
             // If values of same property are not equal,
             // objects are not equivalent

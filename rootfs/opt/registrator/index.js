@@ -11,9 +11,10 @@ process.on("uncaughtException", function (err) {
 });
 
 const argv = require('yargs')
-    .usage('Usage: $0 --consul <IP|FQDN>:<port> --resync <seconds>')
+    .usage('Usage: $0 --consul <IP|FQDN>:<port> --resync <seconds> --ownNetworkOnly <true|false>')
     .demand(['consul'])
-    .default({resync: 3600})
+    .default({resync: 3600, ownNetworkOnly: 'false'})
+    .boolean('ownNetworkOnly')
     .check(function (argv) {
         if (argv.resync < 30) throw "Value for resyncing the services must be greater than or at least equal to 30 seconds";
         return true;
@@ -28,6 +29,33 @@ const Registrator = function (options) {
     const Docker = require('dockerode');
     const docker = new Docker();
     const Container = require("./lib/container");
+
+    let shouldRegister = function (ipAddress) {
+        let addresses = (function () {
+            let interfaces = require("os").networkInterfaces();
+            let addresses = {};
+
+            for (let device in interfaces) {
+                for (let index in interfaces[device]) {
+                    let properties = interfaces[device][index];
+
+                    if (properties.family === 'IPv4' && !properties.internal) {
+                        addresses[properties.address] = properties.netmask;
+                    }
+                }
+            }
+
+            return addresses;
+        })();
+
+        for (let address in addresses) {
+            if (!options.ownNetworkOnly || (options.ownNetworkOnly && require("ip").subnet(address, addresses[address]).contains(ipAddress))) {
+                return true;
+            }
+        }
+
+        return false;
+    };
 
     this.listen = function () {
         log.info("Listening on container events");
@@ -62,17 +90,20 @@ const Registrator = function (options) {
                             }
 
                             let container = new Container(data, consul.agent);
-                            container.consulRegister(function (err, data, res, options) {
-                                if (err) {
-                                    log.error('Error occurred: ' + err);
-                                    log.error(data);
-                                    log.error(res);
-                                    log.error(options);
-                                    return;
-                                }
 
-                                log.info("Registered " + options.id);
-                            });
+                            if (shouldRegister(container.ip)) {
+                                container.consulRegister(function (err, data, res, options) {
+                                    if (err) {
+                                        log.error('Error occurred: ' + err);
+                                        log.error(data);
+                                        log.error(res);
+                                        log.error(options);
+                                        return;
+                                    }
+
+                                    log.info("Registered " + options.id);
+                                });
+                            }
                         });
                         break;
                     case "die":
@@ -123,17 +154,20 @@ const Registrator = function (options) {
                         }
 
                         let container = new Container(data, consul.agent);
-                        container.consulRegister(function (err, data, res, options) {
-                            if (err) {
-                                log.error('Error occurred: ' + err);
-                                log.error(data);
-                                log.error(res);
-                                log.error(options);
-                                return;
-                            }
 
-                            log.info("Synced and registered " + options.id);
-                        });
+                        if (shouldRegister(container.ip)) {
+                            container.consulRegister(function (err, data, res, options) {
+                                if (err) {
+                                    log.error('Error occurred: ' + err);
+                                    log.error(data);
+                                    log.error(res);
+                                    log.error(options);
+                                    return;
+                                }
+
+                                log.info("Synced and registered " + options.id);
+                            });
+                        }
                     });
                 }
             });

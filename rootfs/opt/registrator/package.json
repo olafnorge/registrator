@@ -9,9 +9,11 @@
   },
   "license": "MIT",
   "dependencies": {
-    "consul": "^0.27.0",
-    "dockerode": "^2.3.1",
-    "log": "^1.4.0",
-    "yargs": "^6.4.0"
+    "consul": "^0.27.*",
+    "dockerode": "^2.3.*",
+    "log": "^1.4.*",
+    "ip": "^1.1.*",
+    "os": "^0.1.*",
+    "yargs": "^6.4.*"
   }
 }
