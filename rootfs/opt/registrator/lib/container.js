@@ -148,7 +148,7 @@ const Container = function (definition, consulAgent) {
     this.isRunning = this.definition.State.Status === "running";
     this.checks = this.getChecks(this.definition.Config.Env, "^SERVICE_CHECK_[A-Z]+=.*$", {
         'ip': this.ip,
-        'port': null
+        'port': ''
     }, null);
 };
 
