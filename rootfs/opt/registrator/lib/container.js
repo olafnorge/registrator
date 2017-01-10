@@ -82,7 +82,7 @@ const Container = function (definition, consulAgent) {
 
         return networkSettings.IPAddress;
     };
-    this.getChecks = function (env, regex, fallback) {
+    this.getChecks = function (env, regex, service, fallback) {
         let tmp = fallback || [];
         let check = {};
         let matcher = new RegExp(regex);
@@ -90,8 +90,8 @@ const Container = function (definition, consulAgent) {
 
         for (let index = 0; index < env.length; index++) {
             if (matcher.test(env[index])) {
-                let key = env[index].split('=', 2)[0].split('_').pop().toLowerCase();
-                let value = env[index].split('=', 2)[1];
+                let key = env[index].split('=', 2)[0].split('_').pop().toLowerCase().trim();
+                let value = env[index].split('=', 2)[1].replace('$SERVICE_IP', service.ip).replace('$SERVICE_PORT', service.port).trim();
                 check[key] = value;
             }
         }
@@ -121,7 +121,10 @@ const Container = function (definition, consulAgent) {
     this.agent = consulAgent;
     this.isIgnored = this.getIsIgnored(this.definition.Config.Env, "^SERVICE_IGNORE=.*$");
     this.isRunning = this.definition.State.Status === "running";
-    this.checks = this.getChecks(this.definition.Config.Env, "^SERVICE_CHECK_[A-Z]+=.*$", null);
+    this.checks = this.getChecks(this.definition.Config.Env, "^SERVICE_CHECK_[A-Z]+=.*$", {
+        'ip': this.ip,
+        'port': null
+    }, null);
 };
 
 Container.prototype.consulRegister = function (callback) {
@@ -140,7 +143,10 @@ Container.prototype.consulRegister = function (callback) {
             let name = this.getName(this.definition.Config.Env, "^SERVICE_" + port + "_NAME=.*$", this.name);
             let id = this.id + ":" + name + ":" + port + ":" + protocol;
             let tags = this.getTags(this.definition.Config.Env, "^SERVICE_" + port + "_TAGS=.*$", this.tags);
-            let checks = JSON.parse(JSON.stringify(this.getChecks(this.definition.Config.Env, "^SERVICE_" + port + "_CHECK_.*=.*$", this.checks)).replace('$SERVICE_IP', this.ip).replace('$SERVICE_PORT', port));
+            let checks = this.getChecks(this.definition.Config.Env, "^SERVICE_" + port + "_CHECK_.*=.*$", {
+                'ip': this.ip,
+                'port': port
+            }, this.checks);
 
             (function (options, agent) {
                 agent.service.register(options, function (err, data, res) {
@@ -158,7 +164,7 @@ Container.prototype.consulRegister = function (callback) {
             "id": this.id + ":" + this.name,
             "tags": this.tags,
             "address": this.ip,
-            "checks": JSON.parse(JSON.stringify(this.checks).replace('$SERVICE_IP', this.ip))
+            "checks": this.checks
         }, this.agent);
     }
 };
