@@ -11,7 +11,8 @@ RUN mkdir -p /opt/registrator \
              nodejs \
              su-exec \
       && npm install \
-      && apk delete ca-certificates \
+      && apk del \
+             ca-certificates \
       && chown -R registrator.registrator /opt/registrator
 
 ENTRYPOINT ["/entrypoint.sh"]
