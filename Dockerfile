@@ -6,12 +6,13 @@ WORKDIR /opt/registrator
 RUN mkdir -p /opt/registrator \
       && [ $(getent group registrator) ] || addgroup -S registrator \
       && [ $(getent passwd registrator) ] || adduser -h /opt/registrator -S -D -G registrator registrator \
-      && npm install \
-      && chown -R registrator.registrator /opt/registrator \
       && apk add --no-cache \
              ca-certificates \
              nodejs \
-             su-exec
+             su-exec \
+      && npm install \
+      && apk delete ca-certificates \
+      && chown -R registrator.registrator /opt/registrator
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["registrator"]
