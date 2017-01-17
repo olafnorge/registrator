@@ -41,12 +41,16 @@ is how to connect to its registry, or Consul in this case.
 Besides option flags, the only argument Registrator takes is a registry URI,
 which encodes what type of registry, how to connect to it, and any options.
 ```
-$ docker run -d \
-    --name=registrator \
-    --net=host \
-    --volume=/var/run/docker.sock:/var/run/docker.sock \
-    olafnorge/registrator:latest \ \
-    registrator --consul localhost:8500
+docker run -d \
+	--name=registrator \
+	--volume=/var/run/docker.sock:/var/run/docker.sock \
+	--user="registrator:$(getent group docker | awk -F':' '{print $3}')" \
+	--read-only \
+	--security-opt=no-new-privileges \
+	--pids-limit 6 \
+	--cap-drop=all \
+	olafnorge/registrator:latest \
+	registrator --consul consul-host:8500
 ```
 There's a bit going on here in the Docker run arguments. First, we run the
 container detached and name it. We also run in host network mode. This makes

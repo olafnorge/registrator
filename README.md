@@ -28,6 +28,11 @@ Typically, running Registrator looks like this:
     $ docker run -d \
         --name=registrator \
         --volume=/var/run/docker.sock:/var/run/docker.sock \
+        --user="registrator:$(getent group docker | awk -F':' '{print $3}')" \
+        --read-only \
+        --security-opt=no-new-privileges \
+        --pids-limit 6 \
+        --cap-drop=all \
         olafnorge/registrator:latest \
         registrator --consul consul-host:8500
 

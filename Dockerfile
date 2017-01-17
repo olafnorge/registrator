@@ -31,11 +31,11 @@ RUN mkdir -p /opt/registrator \
       && apk add --no-cache \
              ca-certificates \
              nodejs \
-             su-exec \
       && npm install \
       && apk del \
-             ca-certificates \
+             apk-tools \
       && chown -R registrator.registrator /opt/registrator
 
+USER registrator
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["registrator"]
