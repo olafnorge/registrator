@@ -34,7 +34,8 @@ RUN mkdir -p /opt/registrator \
       && npm install \
       && apk del \
              apk-tools \
-      && chown -R registrator.registrator /opt/registrator
+      && chown -R registrator.registrator /opt/registrator \
+      && for DEL_USER in $(grep -v registrator /etc/passwd | awk -F':' '{print $1}'); do deluser ${DEL_USER}; done
 
 USER registrator
 ENTRYPOINT ["/entrypoint.sh"]
