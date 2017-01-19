@@ -38,5 +38,7 @@ RUN mkdir -p /opt/registrator \
       && for DEL_USER in $(grep -v registrator /etc/passwd | awk -F':' '{print $1}'); do deluser ${DEL_USER}; done
 
 USER registrator
+# Healthcheck
+HEALTHCHECK CMD node ping.js
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["registrator"]

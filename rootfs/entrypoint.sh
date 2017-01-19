@@ -26,4 +26,4 @@ if [ "$1" = 'registrator' ]; then
   exec node index.js "$@" > /proc/self/fd/2
 fi
 
-exec su-exec registrator "$@"
+exec "$@"
