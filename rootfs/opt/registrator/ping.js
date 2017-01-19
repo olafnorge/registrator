@@ -25,13 +25,6 @@
 
 'use strict';
 
-// The next part is here to prevent a major exception when there
-// is no internet connection. This could probable be solved better.
-process.on("uncaughtException", function (err) {
-    log.warning("Whoops! There was an uncaught exception...");
-    log.error(err);
-});
-
 const Docker = require('dockerode');
 const docker = new Docker();
 docker.ping(function (err, data) {
