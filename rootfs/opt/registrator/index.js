@@ -36,12 +36,13 @@ process.on("uncaughtException", function (err) {
 });
 
 const argv = require('yargs')
-    .usage('Usage: $0 --consul <IP|FQDN>:<port> --resync <seconds> --ownNetworkOnly <true|false>')
+    .usage('Usage: $0 --consul <IP|FQDN>:<port> --resync <seconds> --ownNetworkOnly <true|false> --servicesWithPortBindingsOnly <true|false>')
     .demand(['consul'])
-    .default({resync: 3600, ownNetworkOnly: 'false'})
+    .default({resync: 3600, ownNetworkOnly: 'false', servicesWithPortBindingsOnly: 'false'})
     .boolean('ownNetworkOnly')
+    .boolean('servicesWithPortBindingsOnly')
     .check(function (argv) {
-        if (argv.resync < 30) throw "Value for resyncing the services must be greater than or at least equal to 30 seconds";
+        if (argv.resync < 30) throw "Value for re-syncing the services must be greater than or at least equal to 30 seconds";
         return true;
     })
     .argv;
@@ -55,31 +56,28 @@ const Registrator = function (options) {
     const docker = new Docker();
     const Container = require("./lib/container");
 
-    let shouldRegister = function (ipAddress) {
-        let addresses = (function () {
-            let interfaces = require("os").networkInterfaces();
-            let addresses = {};
+    // gather facts about myself
+    this.getIps = function () {
+        let interfaces = require("os").networkInterfaces();
+        let addresses = {};
 
-            for (let device in interfaces) {
-                for (let index in interfaces[device]) {
-                    let properties = interfaces[device][index];
+        for (let device in interfaces) {
+            for (let index in interfaces[device]) {
+                let properties = interfaces[device][index];
 
-                    if (properties.family === 'IPv4' && !properties.internal) {
-                        addresses[properties.address] = properties.netmask;
-                    }
+                if (properties.family === 'IPv4' && !properties.internal) {
+                    addresses[properties.address] = properties.netmask;
                 }
-            }
-
-            return addresses;
-        })();
-
-        for (let address in addresses) {
-            if (!options.ownNetworkOnly || (options.ownNetworkOnly && require("ip").subnet(address, addresses[address]).contains(ipAddress))) {
-                return true;
             }
         }
 
-        return false;
+        return addresses;
+    };
+    const registratorFacts = {
+        'consul_agent': consul.agent,
+        'own_network_only': options.ownNetworkOnly,
+        'ips': this.getIps(),
+        'services_with_port_bindings_only': options.servicesWithPortBindingsOnly
     };
 
     this.listen = function () {
@@ -105,54 +103,47 @@ const Registrator = function (options) {
                 let status = (typeof event.status === 'undefined' ? null : event.status);
                 let id = (typeof event.id === 'undefined' ? null : event.id);
 
-                switch (status) {
-                    case "start":
-                    case "unpause":
-                        docker.getContainer(id).inspect(function (err, data) {
+                if (status && (status === "start" || status === "unpause")) {
+                    docker.getContainer(id).inspect(function (err, containerFacts) {
+                        if (err) {
+                            log.error('Error occurred: ' + err);
+                            return;
+                        }
+
+                        (new Container(containerFacts, registratorFacts)).consulRegister(function (err, data, res, container) {
                             if (err) {
                                 log.error('Error occurred: ' + err);
+                                log.error(data);
+                                log.error(res);
+                                log.error(container);
                                 return;
                             }
 
-                            let container = new Container(data, consul.agent);
-
-                            if (shouldRegister(container.ip)) {
-                                container.consulRegister(function (err, data, res, options) {
-                                    if (err) {
-                                        log.error('Error occurred: ' + err);
-                                        log.error(data);
-                                        log.error(res);
-                                        log.error(options);
-                                        return;
-                                    }
-
-                                    log.info("Registered " + options.id);
-                                });
-                            }
+                            log.info("Registered " + container.id);
                         });
-                        break;
-                    case "die":
-                    case "pause":
-                        docker.getContainer(id).inspect(function (err, data) {
+                    });
+                } else if (status && (status === "die" || status === "pause")) {
+                    docker.getContainer(id).inspect(function (err, containerFacts) {
+                        if (err) {
+                            log.error('Error occurred: ' + err);
+                            return;
+                        }
+
+                        (new Container(containerFacts, registratorFacts)).consulDeregister(function (err, data, res, container) {
                             if (err) {
                                 log.error('Error occurred: ' + err);
+                                log.error(data);
+                                log.error(res);
+                                log.error(container);
                                 return;
                             }
 
-                            let container = new Container(data, consul.agent);
-                            container.consulDeregister(function (err, data, res, options) {
-                                if (err) {
-                                    log.error('Error occurred: ' + err);
-                                    log.error(data);
-                                    log.error(res);
-                                    log.error(options);
-                                    return;
-                                }
-
-                                log.info("Deregistered " + options.id);
-                            });
+                            log.info("Deregistered " + container.id);
                         });
-                        break;
+                    });
+                } else if (status && status.startsWith("health_status:")) {
+                    let state = status.split(":", 2)[1].trim();
+                    log.info(JSON.stringify({'state': state, 'event_object': event}));
                 }
             };
 
@@ -172,27 +163,24 @@ const Registrator = function (options) {
                 }
 
                 for (let index = 0; index < containers.length; index++) {
-                    docker.getContainer(containers[index].Id).inspect(function (err, data) {
+                    docker.getContainer(containers[index].Id).inspect(function (err, containerFacts) {
                         if (err) {
                             log.error('Error occurred: ' + err);
                             return;
                         }
 
-                        let container = new Container(data, consul.agent);
+                        (new Container(containerFacts, registratorFacts)).consulRegister(function (err, data, res, container) {
+                            if (err) {
+                                log.error('Error occurred: ' + err);
+                                log.error(data);
+                                log.error(res);
+                                log.error(container);
+                                return;
+                            }
 
-                        if (shouldRegister(container.ip)) {
-                            container.consulRegister(function (err, data, res, options) {
-                                if (err) {
-                                    log.error('Error occurred: ' + err);
-                                    log.error(data);
-                                    log.error(res);
-                                    log.error(options);
-                                    return;
-                                }
-
-                                log.info("Synced and registered " + options.id);
-                            });
-                        }
+                            console.dir(container);
+                            log.info("Synced and registered " + container.id);
+                        });
                     });
                 }
             });

@@ -23,7 +23,50 @@
  *
  */
 
-const Container = function (definition, consulAgent) {
+const Container = function (containerFacts, registratorFacts) {
+    // register registrator facts
+    const CONSUL_AGENT = registratorFacts.consul_agent;
+    const OWN_NETWORK_ONLY = registratorFacts.own_network_only;
+    const REGISTRATOR_IPS = registratorFacts.ips;
+    const SERVICES_WITH_PORT_BINDINGS_ONLY = registratorFacts.services_with_port_bindings_only;
+
+
+    // declare getters for constants
+    this.getConsulAgent = function () {
+        return CONSUL_AGENT;
+    };
+    this.getIps = function () {
+        return IPS;
+    };
+    this.getPortBindings = function () {
+        return PORT_BINDINGS;
+    };
+    this.getRegisterMe = function () {
+        return REGISTER_ME;
+    };
+    this.getServicesWithPortBindingsOnly = function () {
+        return SERVICES_WITH_PORT_BINDINGS_ONLY;
+    };
+    this.getExposedPorts = function () {
+        return EXPOSED_PORTS;
+    };
+    this.getContainerFacts = function () {
+        return CONTAINER_FACTS;
+    };
+    this.getName = function () {
+        return NAME;
+    };
+    this.getId = function () {
+        return ID;
+    };
+    this.getTags = function () {
+        return TAGS;
+    };
+    this.getChecks = function () {
+        return CHECKS;
+    };
+
+    // declare helper functions
     let objectEquivality = function isEquivalent(a, b) {
         // Create arrays of property names
         let aProps = Object.getOwnPropertyNames(a);
@@ -50,7 +93,8 @@ const Container = function (definition, consulAgent) {
         return true;
     };
 
-    this.getIsIgnored = function (env, regex) {
+    // declare extractors
+    this.extractIsIgnoredFromEnvironment = function (env, regex) {
         let matcher = new RegExp(regex);
 
         for (let index = 0; index < env.length; index++) {
@@ -62,7 +106,7 @@ const Container = function (definition, consulAgent) {
 
         return false;
     };
-    this.getName = function (env, regex, fallback) {
+    this.extractNameFromEnvironment = function (env, regex, fallback) {
         let matcher = new RegExp(regex);
 
         for (let index = 0; index < env.length; index++) {
@@ -73,11 +117,9 @@ const Container = function (definition, consulAgent) {
 
         return fallback;
     };
-    this.getPorts = function (ports) {
-        return ports instanceof Object ? Object.keys(ports) : [];
-    };
-    this.getTags = function (env, regex, fallback) {
-        let tmp = fallback || [];
+
+    this.extractTagsFromEnvironment = function (env, regex, fallback) {
+        let tmp = [];
         let matcher = new RegExp(regex);
 
         for (let index = 0; index < env.length; index++) {
@@ -91,85 +133,155 @@ const Container = function (definition, consulAgent) {
             }
         }
 
+        return tmp.length ? tmp.concat(fallback).filter(function (item) {
+                return item;
+            }) : fallback;
+    };
+    this.extractChecksFromEnvironment = function (env, regex, service, fallback) {
+        let tmp = fallback || [];
+        let matcher = new RegExp(regex);
+
+        for (let ipIndex = 0; ipIndex < service.ips.length; ipIndex++) {
+            let check = {};
+            let checkExists = false;
+
+            for (let index = 0; index < env.length; index++) {
+                if (matcher.test(env[index])) {
+                    check[env[index].split('=', 2)[0].split('_').pop().toLowerCase().trim()] = env[index].split('=', 2)[1].replace('$SERVICE_IP', service.ips[ipIndex]).replace('$SERVICE_PORT', service.port).trim();
+                }
+            }
+
+            if (Object.keys(check).length) {
+                for (let i = 0; i < tmp.length; i++) {
+                    if (objectEquivality(tmp[i], check)) {
+                        checkExists = true;
+                        break;
+                    }
+                }
+
+                if (!checkExists) {
+                    tmp.push(check);
+                }
+            }
+        }
+
         return tmp.length ? tmp : fallback;
     };
-    this.getIp = function (networkSettings) {
-        if (!networkSettings.IPAddress) {
-            for (let key in networkSettings.Networks) {
-                if (networkSettings.Networks.hasOwnProperty(key)) {
-                    // return first available IP address from network settings
-                    if (networkSettings.Networks[key].hasOwnProperty("IPAddress") && networkSettings.Networks[key]["IPAddress"]) {
-                        return networkSettings.Networks[key]["IPAddress"];
+
+
+    // register container facts
+    const CONTAINER_FACTS = containerFacts;
+    const IS_RUNNING = this.getContainerFacts().State.Status === "running";
+    const IS_IGNORED = this.extractIsIgnoredFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_IGNORE=.*$");
+    const ID = this.getContainerFacts().Id;
+    const EXPOSED_PORTS = (function (exposedPorts) {
+        return exposedPorts instanceof Object ? Object.keys(exposedPorts) : [];
+    })(this.getContainerFacts().Config.ExposedPorts);
+    const PORT_BINDINGS = (function (portBindings) {
+        let bindings = [];
+
+        for (let portAndProtocol in portBindings) {
+            if (portBindings.hasOwnProperty(portAndProtocol)) {
+                if (portBindings[portAndProtocol] === null) continue;
+
+                for (let index = 0; index < portBindings[portAndProtocol].length; index++) {
+                    if (portBindings[portAndProtocol][index].hasOwnProperty("HostIp") && portBindings[portAndProtocol][index].hasOwnProperty("HostPort")) {
+                        bindings.push({
+                            'container_port': parseInt(portAndProtocol.split('/')[0]),
+                            'host_ip': portBindings[portAndProtocol][index]["HostIp"],
+                            'host_port': parseInt(portBindings[portAndProtocol][index]["HostPort"]),
+                            'protocol': portAndProtocol.split('/')[1]
+                        });
                     }
                 }
             }
         }
 
-        return networkSettings.IPAddress;
-    };
-    this.getChecks = function (env, regex, service, fallback) {
-        let tmp = fallback || [];
-        let check = {};
-        let matcher = new RegExp(regex);
-        let checkExists = false;
+        return bindings;
+    })(this.getContainerFacts().NetworkSettings.Ports);
+    const TAGS = this.extractTagsFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_TAGS=.*$", null);
+    const IPS = (function (networkSettings) {
+        let ips = [];
 
-        for (let index = 0; index < env.length; index++) {
-            if (matcher.test(env[index])) {
-                let key = env[index].split('=', 2)[0].split('_').pop().toLowerCase().trim();
-                let value = env[index].split('=', 2)[1].replace('$SERVICE_IP', service.ip).replace('$SERVICE_PORT', service.port).trim();
-                check[key] = value;
-            }
-        }
+        for (let key in networkSettings.Networks) {
+            if (networkSettings.Networks.hasOwnProperty(key)) {
+                if (networkSettings.Networks[key].hasOwnProperty("IPAddress") && networkSettings.Networks[key]["IPAddress"]) {
+                    let ip = (function (ip) {
+                        for (let registratorIp in REGISTRATOR_IPS) {
+                            if (!OWN_NETWORK_ONLY || (OWN_NETWORK_ONLY && require("ip").subnet(registratorIp, REGISTRATOR_IPS[registratorIp]).contains(ip))) {
+                                return ip;
+                            }
+                        }
 
-        if (Object.keys(check).length) {
-            for (let i = 0; i < tmp.length; i++) {
-                if (objectEquivality(tmp[i], check)) {
-                    checkExists = true;
-                    break;
+                        return null;
+                    })(networkSettings.Networks[key]["IPAddress"]);
+                    ip && ips.push(ip);
                 }
             }
-
-            if (!checkExists) {
-                tmp.push(check);
-            }
         }
 
-        return tmp.length ? tmp : fallback;
-    };
+        return ips;
+    })(this.getContainerFacts().NetworkSettings);
+    const REGISTER_ME = (function (self) {
+        if (IS_IGNORED) return false;
+        if (!IS_RUNNING) return false;
+        if (SERVICES_WITH_PORT_BINDINGS_ONLY && !self.getPortBindings().length) return false;
+        if (!self.getIps().length) return false;
 
-    this.definition = definition;
-    this.name = this.getName(this.definition.Config.Env, "^SERVICE_NAME=.*$", this.definition.Name.substr(1).replace(/_\d+$/, '').replace(/_/g, '-'));
-    this.ip = this.getIp(this.definition.NetworkSettings);
-    this.ports = this.getPorts(this.definition.Config.ExposedPorts);
-    this.tags = this.getTags(this.definition.Config.Env, "^SERVICE_TAGS=.*$", null);
-    this.id = this.definition.Id;
-    this.agent = consulAgent;
-    this.isIgnored = this.getIsIgnored(this.definition.Config.Env, "^SERVICE_IGNORE=.*$");
-    this.isRunning = this.definition.State.Status === "running";
-    this.checks = this.getChecks(this.definition.Config.Env, "^SERVICE_CHECK_[A-Z]+=.*$", {
-        'ip': this.ip,
+        return true;
+    })(this);
+    const NAME = this.extractNameFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_NAME=.*$", this.getContainerFacts().Name.substr(1).replace(/_\d+$/, '').replace(/_/g, '-'));
+    const CHECKS = this.extractChecksFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_CHECK_[A-Z]+=.*$", {
+        'ips': IPS,
         'port': ''
     }, null);
 };
 
 Container.prototype.consulRegister = function (callback) {
     // do not register any service(s)
-    if (this.isIgnored || !this.isRunning) return;
+    if (!this.getRegisterMe()) return;
 
-    if (this.ports.length) {
-        for (let index = 0; index < this.ports.length; index++) {
-            let port = parseInt(this.ports[index].split('/')[0]);
-
+    if (this.getServicesWithPortBindingsOnly()) {
+        for (let index = 0; index < this.getPortBindings().length; index++) {
             // do not register service
-            if (this.getIsIgnored(this.definition.Config.Env, "^SERVICE_" + port + "_IGNORE=.*$")) continue;
+            if (this.extractIsIgnoredFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_" + this.getPortBindings()[index]['container_port'] + "_IGNORE=.*$")) continue;
 
             // gather other facts
-            let protocol = this.ports[index].split('/')[1];
-            let name = this.getName(this.definition.Config.Env, "^SERVICE_" + port + "_NAME=.*$", this.name);
-            let id = this.id + ":" + name + ":" + port + ":" + protocol;
-            let tags = this.getTags(this.definition.Config.Env, "^SERVICE_" + port + "_TAGS=.*$", this.tags);
-            let checks = this.getChecks(this.definition.Config.Env, "^SERVICE_" + port + "_CHECK_.*=.*$", {
-                'ip': this.ip,
+            let name = this.extractNameFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_" + this.getPortBindings()[index]['container_port'] + "_NAME=.*$", this.getName());
+            let id = this.getId() + ":" + name + ":" + this.getPortBindings()[index]['host_port'] + ":" + this.getPortBindings()[index]['protocol'];
+            let tags = this.extractTagsFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_" + this.getPortBindings()[index]['container_port'] + "_TAGS=.*$", this.getTags());
+            let checks = this.extractChecksFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_" + this.getPortBindings()[index]['container_port'] + "_CHECK_.*=.*$", {
+                'ips': this.getIps(),
+                'port': this.getPortBindings()[index]['container_port']
+            }, this.getChecks());
+
+            (function (options, agent) {
+                agent.service.register(options, function (err, data, res) {
+                    callback(err, data, res, options);
+                });
+            })({
+                "name": name,
+                "id": id,
+                "tags": tags,
+                "address": this.getPortBindings()[index]['host_ip'],
+                "port": this.getPortBindings()[index]['host_port'],
+                "checks": checks
+            }, this.getConsulAgent());
+        }
+    } else if (this.getExposedPorts().length) {
+        for (let index = 0; index < this.getExposedPorts().length; index++) {
+            let port = parseInt(this.getExposedPorts()[index].split('/')[0]);
+
+            // do not register service
+            if (this.extractIsIgnoredFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_" + port + "_IGNORE=.*$")) continue;
+
+            // gather other facts
+            let protocol = this.getExposedPorts()[index].split('/')[1];
+            let name = this.extractNameFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_" + port + "_NAME=.*$", this.getName());
+            let id = this.getId() + ":" + name + ":" + port + ":" + protocol;
+            let tags = this.extractTagsFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_" + port + "_TAGS=.*$", this.getTags());
+            let checks = this.extractChecksFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_" + port + "_CHECK_.*=.*$", {
+                'ips': this.getIps(),
                 'port': port
             }, this.checks);
 
@@ -177,7 +289,14 @@ Container.prototype.consulRegister = function (callback) {
                 agent.service.register(options, function (err, data, res) {
                     callback(err, data, res, options);
                 });
-            })({"name": name, "id": id, "tags": tags, "address": this.ip, "port": port, "checks": checks}, this.agent);
+            })({
+                "name": name,
+                "id": id,
+                "tags": tags,
+                "address": this.getIps()[0], // always register one IP no matter how many are available
+                "port": port,
+                "checks": checks
+            }, this.getConsulAgent());
         }
     } else {
         (function (options, agent) {
@@ -185,34 +304,44 @@ Container.prototype.consulRegister = function (callback) {
                 callback(err, data, res, options);
             });
         })({
-            "name": this.name,
-            "id": this.id + ":" + this.name,
-            "tags": this.tags,
-            "address": this.ip,
-            "checks": this.checks
-        }, this.agent);
+            "name": this.getName(),
+            "id": this.getId() + ":" + this.getName(),
+            "tags": this.getTags(),
+            "address": this.getIps()[0], // always register one IP no matter how many are available
+            "checks": this.getChecks()
+        }, this.getConsulAgent());
     }
 };
 
 Container.prototype.consulDeregister = function (callback) {
-    if (this.ports.length) {
-        for (let index = 0; index < this.ports.length; index++) {
-            let port = parseInt(this.ports[index].split('/')[0]);
-            let protocol = this.ports[index].split('/')[1];
-            let name = this.getName(this.definition.Config.Env, "^SERVICE_" + port + "_NAME=.*$", this.name);
+    if (this.getServicesWithPortBindingsOnly()) {
+        for (let index = 0; index < this.getPortBindings().length; index++) {
+            let name = this.extractNameFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_" + this.getPortBindings()[index]['container_port'] + "_NAME=.*$", this.getName());
 
             (function (options, agent) {
                 agent.service.deregister(options, function (err, data, res) {
                     callback(err, data, res, options);
                 });
-            })({"id": this.id + ":" + name + ":" + port + ":" + protocol}, this.agent);
+            })({"id": this.getId() + ":" + name + ":" + this.getPortBindings()[index]['host_port'] + ":" + this.getPortBindings()[index]['protocol']}, this.getConsulAgent());
+        }
+    } else if (this.getExposedPorts().length) {
+        for (let index = 0; index < this.getExposedPorts().length; index++) {
+            let port = parseInt(this.getExposedPorts()[index].split('/')[0]);
+            let protocol = this.getExposedPorts()[index].split('/')[1];
+            let name = this.extractNameFromEnvironment(this.getContainerFacts().Config.Env, "^SERVICE_" + port + "_NAME=.*$", this.getName());
+
+            (function (options, agent) {
+                agent.service.deregister(options, function (err, data, res) {
+                    callback(err, data, res, options);
+                });
+            })({"id": this.getId() + ":" + name + ":" + port + ":" + protocol}, this.getConsulAgent());
         }
     } else {
         (function (options, agent) {
             agent.service.deregister(options, function (err, data, res) {
                 callback(err, data, res, options);
             });
-        })({"id": this.id + ":" + this.name}, this.agent);
+        })({"id": this.getId() + ":" + this.getName()}, this.getConsulAgent());
     }
 };
 
