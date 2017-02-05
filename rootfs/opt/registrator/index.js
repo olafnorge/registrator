@@ -178,7 +178,6 @@ const Registrator = function (options) {
                                 return;
                             }
 
-                            console.dir(container);
                             log.info("Synced and registered " + container.id);
                         });
                     });

@@ -1,4 +1,4 @@
-#!/usr/bin/env sh
+#!/bin/sh
 # MIT License
 #
 # Copyright (c) [2017] [Volker Machon]

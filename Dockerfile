@@ -23,6 +23,8 @@
 FROM alpine:3.5
 MAINTAINER Volker Machon <volker@machon.biz>
 
+ARG BUSY_BOX_VERSION=1.26.2
+
 COPY rootfs/ /
 WORKDIR /opt/registrator
 RUN mkdir -p /opt/registrator \
@@ -32,10 +34,32 @@ RUN mkdir -p /opt/registrator \
              ca-certificates \
              nodejs \
       && npm install \
+      && apk add --no-cache \
+              gcc \
+              make \
+              musl-dev \
+              ncurses-dev \
+              openssl \
+      && wget -O- https://busybox.net/downloads/busybox-${BUSY_BOX_VERSION}.tar.bz2 > /tmp/busybox.tar.bz2 \
+      && cd /tmp \
+      && tar xfj busybox.tar.bz2 \
+      && cd busybox-${BUSY_BOX_VERSION} \
+      && mv /busybox-config ./.config \
+      && make \
+      && chown -R registrator.registrator /opt/registrator \
+      && for DEL_SYM_LINK in $(/bin/busybox find / -type l | /bin/busybox grep bin); do /bin/busybox rm ${DEL_SYM_LINK}; done \
+      && for SYM_LINK in /bin/test /bin/[ /bin/[[ /bin/ps /bin/ash /bin/sh; do /bin/busybox ln -s /bin/busybox ${SYM_LINK}; done \
       && apk del \
              apk-tools \
-      && chown -R registrator.registrator /opt/registrator \
-      && for DEL_USER in $(grep -v registrator /etc/passwd | awk -F':' '{print $1}'); do deluser ${DEL_USER}; done
+             gcc \
+             make \
+             musl-dev \
+             ncurses-dev \
+             openssl \
+      && /bin/busybox mv /tmp/busybox-${BUSY_BOX_VERSION}/busybox /bin/busybox.new \
+      && /bin/busybox rm -rf /tmp/busybox* \
+      && for DEL_USER in $(/bin/busybox grep -v registrator /etc/passwd | /bin/busybox awk -F':' '{print $1}'); do /bin/busybox deluser ${DEL_USER}; done \
+      && /bin/busybox mv /bin/busybox.new /bin/busybox
 
 USER registrator
 # Healthcheck
