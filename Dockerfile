@@ -24,6 +24,7 @@ FROM alpine:3.5
 MAINTAINER Volker Machon <volker@machon.biz>
 
 ARG BUSY_BOX_VERSION=1.26.2
+ENV NODE_DISABLE_COLORS=1
 
 COPY rootfs/ /
 WORKDIR /opt/registrator

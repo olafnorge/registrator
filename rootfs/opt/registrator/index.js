@@ -110,7 +110,8 @@ const Registrator = function (options) {
                             return;
                         }
 
-                        (new Container(containerFacts, registratorFacts)).consulRegister(function (err, data, res, container) {
+                        let container = new Container(containerFacts, registratorFacts);
+                        container.consulRegister(function (err, data, res, container) {
                             if (err) {
                                 log.error('Error occurred: ' + err);
                                 log.error(data);
@@ -129,7 +130,8 @@ const Registrator = function (options) {
                             return;
                         }
 
-                        (new Container(containerFacts, registratorFacts)).consulDeregister(function (err, data, res, container) {
+                        let container = new Container(containerFacts, registratorFacts);
+                        container.consulDeregister(function (err, data, res, container) {
                             if (err) {
                                 log.error('Error occurred: ' + err);
                                 log.error(data);
@@ -169,7 +171,8 @@ const Registrator = function (options) {
                             return;
                         }
 
-                        (new Container(containerFacts, registratorFacts)).consulRegister(function (err, data, res, container) {
+                        let container = new Container(containerFacts, registratorFacts);
+                        container.consulRegister(function (err, data, res, container) {
                             if (err) {
                                 log.error('Error occurred: ' + err);
                                 log.error(data);
