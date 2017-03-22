@@ -23,7 +23,7 @@
 
 if [ "$1" = 'registrator' ]; then
   shift
-  exec node --inspect=$(grep $(hostname) /etc/hosts | awk '{print $1}'):9229 --debug --trace_gc index.js "$@" > /proc/self/fd/2
+  exec node index.js "$@" > /proc/self/fd/2
 fi
 
 exec "$@"
